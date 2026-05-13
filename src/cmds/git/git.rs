@@ -23,6 +23,8 @@ pub enum GitCommand {
     Fetch,
     Stash { subcommand: Option<String> },
     Worktree,
+    Tag,
+    Remote,
 }
 
 /// Create a git Command with global options (e.g. -C, -c, --git-dir, --work-tree)
@@ -68,6 +70,8 @@ pub fn run(
             run_stash(subcommand.as_deref(), args, verbose, global_args)
         }
         GitCommand::Worktree => run_worktree(args, verbose, global_args),
+        GitCommand::Tag => run_tag(args, verbose, global_args),
+        GitCommand::Remote => run_remote(args, verbose, global_args),
     }
 }
 
@@ -1771,6 +1775,106 @@ fn filter_worktree_list(output: &str) -> String {
 }
 
 /// Runs an unsupported git subcommand by passing it through directly
+
+fn run_tag(args: &[String], verbose: u8, global_args: &[String]) -> Result<i32> {
+    let timer = tracking::TimedExecution::start();
+
+    if verbose > 0 {
+        eprintln!("git tag");
+    }
+
+    let mut cmd = git_cmd(global_args);
+    cmd.arg("tag");
+    for arg in args {
+        cmd.arg(arg);
+    }
+
+    let result = exec_capture(&mut cmd).context("Failed to run git tag")?;
+    let raw = result.combined();
+
+    if !result.success() {
+        eprint!("{}", result.stderr);
+        return Ok(result.exit_code);
+    }
+
+    let lines: Vec<&str> = result.stdout.lines().filter(|l| !l.is_empty()).collect();
+    const MAX_TAGS: usize = 20;
+
+    let output = if lines.len() > MAX_TAGS {
+        let remainder = lines.len() - MAX_TAGS;
+        let mut out = lines[..MAX_TAGS].join("\n");
+        out.push_str(&format!("\n... and {} more tags", remainder));
+        out
+    } else {
+        lines.join("\n")
+    };
+
+    if !output.is_empty() {
+        println!("{}", output);
+    }
+    timer.track("git tag", "rtk git tag", &raw, &output);
+
+    Ok(0)
+}
+
+fn run_remote(args: &[String], verbose: u8, global_args: &[String]) -> Result<i32> {
+    let timer = tracking::TimedExecution::start();
+
+    if verbose > 0 {
+        eprintln!("git remote");
+    }
+
+    // RTK has a global -v flag that clap absorbs before it reaches args, so we cannot
+    // reliably detect "git remote -v" via args alone. Always run with -v internally
+    // and deduplicate: this is universally more useful to agents than names-only output.
+    let mut cmd = git_cmd(global_args);
+    cmd.arg("remote").arg("-v");
+    // Pass any remaining args (e.g. subcommands like "add", "remove", "set-url") through
+    // to a passthrough path since they are mutation operations.
+    let is_mutation = args.iter().any(|a| {
+        matches!(a.as_str(), "add" | "remove" | "rename" | "set-url" | "set-head" | "prune" | "update")
+    });
+    if is_mutation {
+        let mut os_args: Vec<OsString> = vec![OsString::from("remote")];
+        os_args.extend(args.iter().map(OsString::from));
+        return run_passthrough(&os_args, global_args, verbose);
+    }
+    for arg in args {
+        if arg != "-v" && arg != "--verbose" {
+            cmd.arg(arg);
+        }
+    }
+
+    let result = exec_capture(&mut cmd).context("Failed to run git remote")?;
+    let raw = result.combined();
+
+    if !result.success() {
+        eprint!("{}", result.stderr);
+        return Ok(result.exit_code);
+    }
+
+    // git remote -v emits pairs: "origin\thttps://...\t(fetch)" and "origin\thttps://...\t(push)"
+    // Keep only fetch lines, strip the trailing " (fetch)" annotation
+    let deduped: Vec<String> = result
+        .stdout
+        .lines()
+        .filter(|l| l.ends_with("(fetch)"))
+        .map(|l| {
+            l.trim_end_matches("(fetch)")
+                .trim_end()
+                .to_string()
+        })
+        .collect();
+
+    let output = deduped.join("\n");
+    if !output.is_empty() {
+        println!("{}", output);
+    }
+    timer.track("git remote -v", "rtk git remote -v", &raw, &output);
+
+    Ok(0)
+}
+
 pub fn run_passthrough(args: &[OsString], global_args: &[String], verbose: u8) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 
