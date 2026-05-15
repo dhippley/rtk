@@ -248,7 +248,6 @@ pub fn run(
     install_claude: bool,
     install_opencode: bool,
     install_cursor: bool,
-    install_windsurf: bool,
     install_cline: bool,
     claude_md: bool,
     hook_only: bool,
@@ -285,13 +284,7 @@ pub fn run(
             anyhow::bail!("Cursor hooks are global-only. Use: rtk init -g --agent cursor");
         }
 
-        if install_windsurf && !global {
-            anyhow::bail!("Windsurf support is global-only. Use: rtk init -g --agent windsurf");
-        }
-
-        if install_windsurf {
-            run_windsurf_mode(ctx)?;
-        } else if install_cline {
+        if install_cline {
             run_cline_mode(ctx)?;
         } else {
             // Mode selection (Claude Code / OpenCode)
@@ -1571,10 +1564,7 @@ fn run_claude_md_mode(global: bool, install_opencode: bool, ctx: InitContext) ->
     Ok(())
 }
 
-// ─── Windsurf support ─────────────────────────────────────────
-
-/// Embedded Windsurf RTK rules
-const WINDSURF_RULES: &str = include_str!("../../hooks/windsurf/rules.md");
+// ─── Cline / Roo Code support ─────────────────────────────────
 
 /// Embedded Cline RTK rules
 const CLINE_RULES: &str = include_str!("../../hooks/cline/rules.md");
@@ -1620,51 +1610,6 @@ fn run_cline_mode(ctx: InitContext) -> Result<()> {
     if !dry_run {
         println!("  Cline will now use rtk commands for token savings.");
         println!("  Test with: git status\n");
-    }
-
-    Ok(())
-}
-
-fn run_windsurf_mode(ctx: InitContext) -> Result<()> {
-    let InitContext { verbose, dry_run } = ctx;
-    // Windsurf reads .windsurfrules from the project root (workspace-scoped).
-    // Global rules (~/.codeium/windsurf/memories/global_rules.md) are unreliable.
-    let rules_path = PathBuf::from(".windsurfrules");
-
-    let existing = fs::read_to_string(&rules_path).unwrap_or_default();
-    if existing.contains("RTK") || existing.contains("rtk") {
-        if !dry_run {
-            println!("\nRTK already configured for Windsurf in this project.\n");
-            println!("  Rules: .windsurfrules (already present)");
-        }
-    } else {
-        let new_content = if existing.trim().is_empty() {
-            WINDSURF_RULES.to_string()
-        } else {
-            format!("{}\n\n{}", existing.trim(), WINDSURF_RULES)
-        };
-        if dry_run {
-            println!(
-                "[dry-run] would write .windsurfrules: {}",
-                rules_path.display()
-            );
-            if verbose > 0 {
-                println!("[dry-run] content:\n{}", new_content);
-            }
-        } else {
-            fs::write(&rules_path, &new_content).context("Failed to write .windsurfrules")?;
-
-            if verbose > 0 {
-                eprintln!("Wrote .windsurfrules");
-            }
-
-            println!("\nRTK configured for Windsurf Cascade.\n");
-            println!("  Rules: .windsurfrules (installed)");
-        }
-    }
-    if !dry_run {
-        println!("  Cascade will now use rtk commands for token savings.");
-        println!("  Restart Windsurf. Test with: git status\n");
     }
 
     Ok(())
@@ -1722,63 +1667,6 @@ fn run_kilocode_mode_at(base_dir: &Path, ctx: InitContext) -> Result<()> {
         print_dry_run_footer();
     } else {
         println!("  Kilo Code will now use rtk commands for token savings.");
-        println!("  Test with: git status\n");
-    }
-
-    Ok(())
-}
-
-// ─── Google Antigravity support ───────────────────────────────
-
-const ANTIGRAVITY_RULES: &str = include_str!("../../hooks/antigravity/rules.md");
-
-pub fn run_antigravity_mode(ctx: InitContext) -> Result<()> {
-    run_antigravity_mode_at(&std::env::current_dir()?, ctx)
-}
-
-fn run_antigravity_mode_at(base_dir: &Path, ctx: InitContext) -> Result<()> {
-    let InitContext { verbose, dry_run } = ctx;
-    // Antigravity reads .agents/rules/ from the project root (workspace-scoped)
-    let target_dir = base_dir.join(".agents/rules");
-    let rules_path = target_dir.join("antigravity-rtk-rules.md");
-
-    let existing = fs::read_to_string(&rules_path).unwrap_or_default();
-    if existing.contains("RTK") || existing.contains("rtk") {
-        if !dry_run {
-            println!("\nRTK already configured for Antigravity in this project.\n");
-            println!("  Rules: .agents/rules/antigravity-rtk-rules.md (already present)");
-        }
-    } else {
-        let new_content = if existing.trim().is_empty() {
-            ANTIGRAVITY_RULES.to_string()
-        } else {
-            format!("{}\n\n{}", existing.trim(), ANTIGRAVITY_RULES)
-        };
-        if dry_run {
-            println!(
-                "[dry-run] would write {}: (and create parent dir if missing)",
-                rules_path.display()
-            );
-            if verbose > 0 {
-                println!("[dry-run] content:\n{}", new_content);
-            }
-        } else {
-            fs::create_dir_all(&target_dir).context("Failed to create .agents/rules directory")?;
-            fs::write(&rules_path, &new_content)
-                .context("Failed to write .agents/rules/antigravity-rtk-rules.md")?;
-
-            if verbose > 0 {
-                eprintln!("Wrote .agents/rules/antigravity-rtk-rules.md");
-            }
-
-            println!("\nRTK configured for Google Antigravity.\n");
-            println!("  Rules: .agents/rules/antigravity-rtk-rules.md (installed)");
-        }
-    }
-    if dry_run {
-        print_dry_run_footer();
-    } else {
-        println!("  Antigravity will now use rtk commands for token savings.");
         println!("  Test with: git status\n");
     }
 
@@ -3952,7 +3840,6 @@ mod tests {
             false,
             false,
             false,
-            false,
             true,
             PatchMode::Auto,
             InitContext::default(),
@@ -3967,7 +3854,6 @@ mod tests {
     #[test]
     fn test_codex_mode_rejects_no_patch() {
         let err = run(
-            false,
             false,
             false,
             false,
@@ -4007,31 +3893,6 @@ mod tests {
 
         // Second run should not overwrite
         run_kilocode_mode_at(temp.path(), InitContext::default()).unwrap();
-        let second = fs::read_to_string(&path).unwrap();
-        assert_eq!(first, second, "Idempotent: content should not change");
-    }
-
-    #[test]
-    fn test_antigravity_mode_creates_rules_file() {
-        let temp = TempDir::new().unwrap();
-        run_antigravity_mode_at(temp.path(), InitContext::default()).unwrap();
-
-        let rules_path = temp.path().join(".agents/rules/antigravity-rtk-rules.md");
-        assert!(rules_path.exists(), "Rules file should be created");
-        let content = fs::read_to_string(&rules_path).unwrap();
-        assert!(content.contains("RTK"), "Rules file should contain RTK");
-    }
-
-    #[test]
-    fn test_antigravity_mode_is_idempotent() {
-        let temp = TempDir::new().unwrap();
-        run_antigravity_mode_at(temp.path(), InitContext::default()).unwrap();
-
-        let path = temp.path().join(".agents/rules/antigravity-rtk-rules.md");
-        let first = fs::read_to_string(&path).unwrap();
-
-        // Second run should not overwrite
-        run_antigravity_mode_at(temp.path(), InitContext::default()).unwrap();
         let second = fs::read_to_string(&path).unwrap();
         assert_eq!(first, second, "Idempotent: content should not change");
     }

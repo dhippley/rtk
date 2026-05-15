@@ -605,7 +605,10 @@ fn rewrite_line_range(cmd: &str) -> Option<String> {
         if let Some(caps) = re.captures(cmd) {
             let n = caps.get(1)?.as_str();
             let file = caps.get(2)?.as_str();
-            return Some(format!("rtk read {} --max-lines {}", file, n));
+            return Some(format!(
+                "rtk read {} --max-lines {} --level minimal",
+                file, n
+            ));
         }
     }
     if cmd.starts_with("head -") {
@@ -1731,7 +1734,7 @@ mod tests {
         // head -20 file → rtk read file --max-lines 20 (not rtk read -20 file)
         assert_eq!(
             rewrite_command_no_prefixes("head -20 src/main.rs", &[]),
-            Some("rtk read src/main.rs --max-lines 20".into())
+            Some("rtk read src/main.rs --max-lines 20 --level minimal".into())
         );
     }
 
@@ -1739,7 +1742,7 @@ mod tests {
     fn test_rewrite_head_lines_long_flag() {
         assert_eq!(
             rewrite_command_no_prefixes("head --lines=50 src/lib.rs", &[]),
-            Some("rtk read src/lib.rs --max-lines 50".into())
+            Some("rtk read src/lib.rs --max-lines 50 --level minimal".into())
         );
     }
 

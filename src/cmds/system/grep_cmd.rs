@@ -125,17 +125,25 @@ pub fn run(
     }
 
     let mut rtk_output = String::new();
-    rtk_output.push_str(&format!(
-        "{} matches in {} files:\n\n",
-        total_matches,
-        by_file.len()
-    ));
+
+    // Only show the header when results span many files or are being truncated.
+    // For small targeted searches (the common case) the header adds tokens
+    // without providing value -- raw grep doesn't emit one either.
+    let limits = config::limits();
+    let show_header = context_only || by_file.len() > limits.grep_header_threshold || total_matches > max_results;
+    if show_header {
+        rtk_output.push_str(&format!(
+            "{} matches in {} files:\n\n",
+            total_matches,
+            by_file.len()
+        ));
+    }
 
     let mut shown = 0;
     let mut files: Vec<_> = by_file.iter().collect();
     files.sort_by_key(|(f, _)| *f);
 
-    let per_file = config::limits().grep_max_per_file;
+    let per_file = limits.grep_max_per_file;
     for (file, matches) in files {
         if shown >= max_results {
             break;
@@ -152,7 +160,7 @@ pub fn run(
     }
 
     if total_matches > shown {
-        rtk_output.push_str(&format!("[+{} more]\n", total_matches - shown));
+        rtk_output.push_str(&format!("[+{} more matches in {} files]\n", total_matches - shown, by_file.len()));
     }
 
     print!("{}", rtk_output);

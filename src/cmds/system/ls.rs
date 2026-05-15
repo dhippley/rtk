@@ -235,18 +235,39 @@ fn compact_ls(raw: &str, show_all: bool) -> (String, String, usize) {
 
     let mut entries = String::new();
 
+    let total_entries = dirs.len() + files.len();
+    let max_entries = crate::core::config::limits().ls_max_entries;
+    let capped = total_entries > max_entries;
+
+    // When capping, allocate proportionally between dirs and files, dirs first.
+    let dirs_shown = if capped {
+        dirs.len().min(max_entries)
+    } else {
+        dirs.len()
+    };
+    let files_shown = if capped {
+        (max_entries - dirs_shown).min(files.len())
+    } else {
+        files.len()
+    };
+
     // Dirs first, compact
-    for d in &dirs {
+    for d in dirs.iter().take(dirs_shown) {
         entries.push_str(d);
         entries.push_str("/\n");
     }
 
     // Files with size
-    for (name, size) in &files {
+    for (name, size) in files.iter().take(files_shown) {
         entries.push_str(name);
         entries.push_str("  ");
         entries.push_str(size);
         entries.push('\n');
+    }
+
+    if capped {
+        let remaining = total_entries - (dirs_shown + files_shown);
+        entries.push_str(&format!("[+{} more files]\n", remaining));
     }
 
     // Summary line (separate so caller can suppress when piped)
