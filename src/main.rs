@@ -861,6 +861,18 @@ enum GitCommands {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
+    /// Compact tag listing (truncated at 20)
+    Tag {
+        /// Git tag arguments (supports --list, -l, etc)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Remote listing (deduplicated with -v)
+    Remote {
+        /// Git remote arguments (supports -v, --verbose, etc)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
     /// Passthrough: runs any unsupported git subcommand directly
     #[command(external_subcommand)]
     Other(Vec<OsString>),
@@ -1569,6 +1581,20 @@ fn run_cli() -> Result<i32> {
                 )?,
                 GitCommands::Worktree { args } => git::run(
                     git::GitCommand::Worktree,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Tag { args } => git::run(
+                    git::GitCommand::Tag,
+                    &args,
+                    None,
+                    cli.verbose,
+                    &global_args,
+                )?,
+                GitCommands::Remote { args } => git::run(
+                    git::GitCommand::Remote,
                     &args,
                     None,
                     cli.verbose,

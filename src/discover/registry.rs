@@ -3420,6 +3420,46 @@ mod tests {
     }
 
     #[test]
+    fn test_classify_git_rev_parse() {
+        assert!(matches!(
+            classify_command("git rev-parse HEAD"),
+            Classification::Supported { .. }
+        ));
+    }
+
+    #[test]
+    fn test_classify_git_remote() {
+        assert!(matches!(
+            classify_command("git remote -v"),
+            Classification::Supported { .. }
+        ));
+    }
+
+    #[test]
+    fn test_classify_git_tag() {
+        assert!(matches!(
+            classify_command("git tag"),
+            Classification::Supported { .. }
+        ));
+    }
+
+    #[test]
+    fn test_classify_git_checkout() {
+        assert!(matches!(
+            classify_command("git checkout main"),
+            Classification::Supported { .. }
+        ));
+    }
+
+    #[test]
+    fn test_classify_git_config() {
+        assert!(matches!(
+            classify_command("git config --get user.email"),
+            Classification::Supported { .. }
+        ));
+    }
+
+    #[test]
     fn test_strip_absolute_path_helper() {
         assert_eq!(strip_absolute_path("/usr/bin/grep -rn foo"), "grep -rn foo");
         assert_eq!(strip_absolute_path("/bin/ls -la"), "ls -la");
