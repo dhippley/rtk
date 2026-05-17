@@ -38,6 +38,8 @@ pub struct SupportedEntry {
     pub estimated_savings_tokens: usize,
     pub estimated_savings_pct: f64,
     pub rtk_status: RtkStatus,
+    /// True when the hook audit log shows this rtk_equivalent was actively rewritten.
+    pub hook_handled: bool,
 }
 
 /// An unsupported command not yet handled by RTK.
@@ -84,6 +86,10 @@ pub struct DiscoverReport {
     pub sessions_scanned: usize,
     pub total_commands: usize,
     pub already_rtk: usize,
+    /// Commands confirmed handled by the hook (audit log cross-reference).
+    pub hook_handled_count: usize,
+    /// True when the audit log has entries in the scanned window.
+    pub hook_active: bool,
     pub since_days: u64,
     pub supported: Vec<SupportedEntry>,
     pub unsupported: Vec<UnsupportedEntry>,
@@ -91,19 +97,6 @@ pub struct DiscoverReport {
     pub rtk_disabled_count: usize,
     pub rtk_disabled_examples: Vec<String>,
     pub agent_status: AgentIntegrationStatus,
-}
-
-impl DiscoverReport {
-    pub fn total_saveable_tokens(&self) -> usize {
-        self.supported
-            .iter()
-            .map(|s| s.estimated_savings_tokens)
-            .sum()
-    }
-
-    pub fn total_supported_count(&self) -> usize {
-        self.supported.iter().map(|s| s.count).sum()
-    }
 }
 
 /// Format report as text.
@@ -117,15 +110,24 @@ pub fn format_text(report: &DiscoverReport, limit: usize, verbose: bool) -> Stri
         "Scanned: {} sessions (last {} days), {} Bash commands\n",
         report.sessions_scanned, report.since_days, report.total_commands
     ));
+    let rtk_covered = report.already_rtk + report.hook_handled_count;
     out.push_str(&format!(
-        "Already using RTK: {} commands ({:.1}%)\n",
-        report.already_rtk,
+        "RTK coverage: {} commands ({:.1}%) -- {} explicit, {} via hook\n",
+        rtk_covered,
         if report.total_commands > 0 {
-            report.already_rtk as f64 * 100.0 / report.total_commands as f64
+            rtk_covered as f64 * 100.0 / report.total_commands as f64
         } else {
             0.0
-        }
+        },
+        report.already_rtk,
+        report.hook_handled_count,
     ));
+
+    if report.hook_active {
+        out.push_str("Hook status: ACTIVE (audit log cross-reference enabled)\n");
+    } else {
+        out.push_str("Hook status: no audit data yet -- set RTK_HOOK_AUDIT=1 to track\n");
+    }
 
     if report.supported.is_empty() && report.unsupported.is_empty() {
         out.push_str("\nNo missed savings found. RTK usage looks good!\n");
@@ -133,34 +135,81 @@ pub fn format_text(report: &DiscoverReport, limit: usize, verbose: bool) -> Stri
         return out;
     }
 
-    // Missed savings
     if !report.supported.is_empty() {
-        out.push_str("\nMISSED SAVINGS -- Commands RTK already handles\n");
-        out.push_str(&"-".repeat(72));
-        out.push('\n');
-        out.push_str(&format!(
-            "{:<24} {:>5}    {:<18} {:<13} {:>12}\n",
-            "Command", "Count", "RTK Equivalent", "Status", "Est. Savings"
-        ));
+        let (hook_entries, missed_entries): (Vec<_>, Vec<_>) =
+            report.supported.iter().partition(|e| e.hook_handled);
 
-        for entry in report.supported.iter().take(limit) {
+        // Hook-handled section
+        if !hook_entries.is_empty() {
+            out.push_str("\nHANDLED BY HOOK -- savings are real, not missed\n");
+            out.push_str(&"-".repeat(72));
+            out.push('\n');
             out.push_str(&format!(
-                "{:<24} {:>5}    {:<18} {:<13} ~{}\n",
-                truncate_str(&entry.command, 23),
-                entry.count,
-                entry.rtk_equivalent,
-                entry.rtk_status.as_str(),
-                format_tokens(entry.estimated_savings_tokens),
+                "{:<24} {:>5}    {:<18} {:<13} {:>12}\n",
+                "Command", "Count", "RTK Equivalent", "Status", "Est. Savings"
+            ));
+
+            for entry in hook_entries.iter().take(limit) {
+                out.push_str(&format!(
+                    "{:<24} {:>5}    {:<18} {:<13} ~{}\n",
+                    truncate_str(&entry.command, 23),
+                    entry.count,
+                    entry.rtk_equivalent,
+                    entry.rtk_status.as_str(),
+                    format_tokens(entry.estimated_savings_tokens),
+                ));
+            }
+
+            let hook_count: usize = hook_entries.iter().map(|e| e.count).sum();
+            let hook_tokens: usize = hook_entries
+                .iter()
+                .map(|e| e.estimated_savings_tokens)
+                .sum();
+            out.push_str(&"-".repeat(72));
+            out.push('\n');
+            out.push_str(&format!(
+                "Total: {} commands -> ~{} saved\n",
+                hook_count,
+                format_tokens(hook_tokens),
             ));
         }
 
-        out.push_str(&"-".repeat(72));
-        out.push('\n');
-        out.push_str(&format!(
-            "Total: {} commands -> ~{} saveable\n",
-            report.total_supported_count(),
-            format_tokens(report.total_saveable_tokens()),
-        ));
+        // Truly missed section
+        if !missed_entries.is_empty() {
+            out.push_str(
+                "\nMISSED SAVINGS -- Commands RTK already handles but hook did not rewrite\n",
+            );
+            out.push_str(&"-".repeat(72));
+            out.push('\n');
+            out.push_str(&format!(
+                "{:<24} {:>5}    {:<18} {:<13} {:>12}\n",
+                "Command", "Count", "RTK Equivalent", "Status", "Est. Savings"
+            ));
+
+            for entry in missed_entries.iter().take(limit) {
+                out.push_str(&format!(
+                    "{:<24} {:>5}    {:<18} {:<13} ~{}\n",
+                    truncate_str(&entry.command, 23),
+                    entry.count,
+                    entry.rtk_equivalent,
+                    entry.rtk_status.as_str(),
+                    format_tokens(entry.estimated_savings_tokens),
+                ));
+            }
+
+            let missed_count: usize = missed_entries.iter().map(|e| e.count).sum();
+            let missed_tokens: usize = missed_entries
+                .iter()
+                .map(|e| e.estimated_savings_tokens)
+                .sum();
+            out.push_str(&"-".repeat(72));
+            out.push('\n');
+            out.push_str(&format!(
+                "Total: {} commands -> ~{} saveable\n",
+                missed_count,
+                format_tokens(missed_tokens),
+            ));
+        }
     }
 
     // Unhandled
@@ -261,6 +310,8 @@ mod tests {
             sessions_scanned: 1,
             total_commands,
             already_rtk,
+            hook_handled_count: 0,
+            hook_active: false,
             since_days: 30,
             supported: vec![],
             unsupported: vec![],

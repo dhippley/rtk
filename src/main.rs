@@ -37,14 +37,10 @@ pub enum AgentTarget {
     Claude,
     /// Cursor Agent (editor and CLI)
     Cursor,
-    /// Windsurf IDE (Cascade)
-    Windsurf,
     /// Cline / Roo Code (VS Code)
     Cline,
     /// Kilo Code
     Kilocode,
-    /// Google Antigravity
-    Antigravity,
     /// Hermes CLI
     Hermes,
 }
@@ -1586,13 +1582,9 @@ fn run_cli() -> Result<i32> {
                     cli.verbose,
                     &global_args,
                 )?,
-                GitCommands::Tag { args } => git::run(
-                    git::GitCommand::Tag,
-                    &args,
-                    None,
-                    cli.verbose,
-                    &global_args,
-                )?,
+                GitCommands::Tag { args } => {
+                    git::run(git::GitCommand::Tag, &args, None, cli.verbose, &global_args)?
+                }
                 GitCommands::Remote { args } => git::run(
                     git::GitCommand::Remote,
                     &args,
@@ -1853,20 +1845,12 @@ fn run_cli() -> Result<i32> {
                     anyhow::bail!("Kilo Code is project-scoped. Use: rtk init --agent kilocode");
                 }
                 hooks::init::run_kilocode_mode(ctx)?;
-            } else if agent == Some(AgentTarget::Antigravity) {
-                if global {
-                    anyhow::bail!(
-                        "Antigravity is project-scoped. Use: rtk init --agent antigravity"
-                    );
-                }
-                hooks::init::run_antigravity_mode(ctx)?;
             } else if agent == Some(AgentTarget::Hermes) {
                 hooks::init::run_hermes_mode(ctx)?;
             } else {
                 let install_opencode = opencode;
                 let install_claude = !opencode;
                 let install_cursor = agent == Some(AgentTarget::Cursor);
-                let install_windsurf = agent == Some(AgentTarget::Windsurf);
                 let install_cline = agent == Some(AgentTarget::Cline);
 
                 let patch_mode = if auto_patch {
@@ -1881,7 +1865,6 @@ fn run_cli() -> Result<i32> {
                     install_claude,
                     install_opencode,
                     install_cursor,
-                    install_windsurf,
                     install_cline,
                     claude_md,
                     hook_only,

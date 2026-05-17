@@ -125,12 +125,26 @@ pub struct LimitsConfig {
     pub grep_max_results: usize,
     /// Max matches per file in grep output (default: 25)
     pub grep_max_per_file: usize,
+    /// Min number of matched files before showing the grep header (default: 5)
+    #[serde(default = "default_grep_header_threshold")]
+    pub grep_header_threshold: usize,
     /// Max staged/modified files shown in git status (default: 15)
     pub status_max_files: usize,
     /// Max untracked files shown in git status (default: 10)
     pub status_max_untracked: usize,
     /// Max chars for parser passthrough fallback (default: 2000)
     pub passthrough_max_chars: usize,
+    /// Max directory entries shown by rtk ls before truncation (default: 150)
+    #[serde(default = "default_ls_max_entries")]
+    pub ls_max_entries: usize,
+}
+
+fn default_grep_header_threshold() -> usize {
+    5
+}
+
+fn default_ls_max_entries() -> usize {
+    150
 }
 
 impl Default for LimitsConfig {
@@ -138,9 +152,11 @@ impl Default for LimitsConfig {
         Self {
             grep_max_results: 200,
             grep_max_per_file: 25,
+            grep_header_threshold: 5,
             status_max_files: 15,
             status_max_untracked: 10,
             passthrough_max_chars: 2000,
+            ls_max_entries: 150,
         }
     }
 }

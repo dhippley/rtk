@@ -492,6 +492,11 @@ fn run_log(
         arg.starts_with("--oneline") || arg.starts_with("--pretty") || arg.starts_with("--format")
     });
 
+    // Check if user wants stat output (has its own format, don't inject RTK format)
+    let wants_stat = args
+        .iter()
+        .any(|arg| arg == "--stat" || arg == "--numstat" || arg == "--shortstat");
+
     // Check if user provided limit flag (-N, -n N, --max-count=N, --max-count N)
     let has_limit_flag = args.iter().any(|arg| {
         (arg.starts_with('-') && arg.chars().nth(1).is_some_and(|c| c.is_ascii_digit()))
@@ -502,7 +507,7 @@ fn run_log(
     // Apply RTK defaults only if user didn't specify them
     // Use %b (body) to preserve first line of commit body for agent context
     // (BREAKING CHANGE, Closes #xxx, design notes)
-    if !has_format_flag {
+    if !has_format_flag && !wants_stat {
         cmd.args(["--pretty=format:%h %s (%ar) <%an>%n%b%n---END---"]);
     }
 
@@ -511,10 +516,10 @@ fn run_log(
         // User explicitly passed -N / -n N / --max-count=N → respect their choice
         let n = parse_user_limit(args).unwrap_or(10);
         (n, true)
-    } else if has_format_flag {
-        // --oneline / --pretty without -N: user wants compact output, allow more
-        cmd.arg("-50");
-        (50, false)
+    } else if has_format_flag || wants_stat {
+        // --oneline / --pretty / --stat without -N: default to 20 commits
+        cmd.arg("-20");
+        (20, false)
     } else {
         // No flags at all: default to 10
         cmd.arg("-10");
@@ -545,8 +550,12 @@ fn run_log(
         eprintln!("Git log output:");
     }
 
-    // Post-process: truncate long messages, cap lines only if RTK set the default
-    let filtered = filter_log_output(&result.stdout, limit, user_set_limit, has_format_flag);
+    // Post-process: apply appropriate filter based on format
+    let filtered = if wants_stat {
+        filter_stat_output(&result.stdout, limit, user_set_limit)
+    } else {
+        filter_log_output(&result.stdout, limit, user_set_limit, has_format_flag)
+    };
     println!("{}", filtered);
 
     timer.track(
@@ -678,6 +687,40 @@ fn truncate_line(line: &str, width: usize) -> String {
     } else {
         line.to_string()
     }
+}
+
+/// Filter `git log --stat` output: keep commit headers and summary lines,
+/// drop per-file stat lines (e.g. `src/main.rs | 45 +++--`).
+/// Respects limit when user_set_limit is false.
+pub(crate) fn filter_stat_output(
+    output: &str,
+    limit: usize,
+    user_set_limit: bool,
+) -> String {
+    lazy_static::lazy_static! {
+        // Matches per-file stat lines: "  path/to/file | NN +---"
+        static ref STAT_FILE_LINE: regex::Regex =
+            regex::Regex::new(r"^\s+\S.*\|\s+\d+").unwrap();
+    }
+
+    let mut result: Vec<String> = Vec::new();
+    let mut commit_count = 0;
+
+    for line in output.lines() {
+        if line.starts_with("commit ") {
+            commit_count += 1;
+            if !user_set_limit && commit_count > limit {
+                break;
+            }
+            result.push(line.to_string());
+        } else if STAT_FILE_LINE.is_match(line) {
+            // Per-file stat line -- drop it
+        } else {
+            result.push(line.to_string());
+        }
+    }
+
+    result.join("\n").trim_end().to_string()
 }
 
 /// Preserve RTK's branch/clean framing while keeping porcelain file lines intact.
@@ -1741,7 +1784,6 @@ fn filter_worktree_list(output: &str) -> String {
 }
 
 /// Runs an unsupported git subcommand by passing it through directly
-
 fn run_tag(args: &[String], verbose: u8, global_args: &[String]) -> Result<i32> {
     let timer = tracking::TimedExecution::start();
 

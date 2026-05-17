@@ -7,7 +7,7 @@ mod report;
 pub mod rules;
 
 use anyhow::Result;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use provider::{ClaudeProvider, SessionProvider};
 use registry::{
@@ -38,6 +38,54 @@ struct SupportedBucket {
 struct UnsupportedBucket {
     count: usize,
     example: String,
+}
+
+/// Reads the hook audit log and returns the set of `rtk_equivalent` strings
+/// that the hook actively rewrote within the last `since_days` days.
+/// Returns an empty set if the audit log is absent or unreadable.
+fn load_hook_handled_equivalents(since_days: u64) -> HashSet<&'static str> {
+    let log_path = match dirs::home_dir() {
+        Some(h) => h.join(".local/share/rtk/hook-audit.log"),
+        None => return HashSet::new(),
+    };
+
+    let content = match std::fs::read_to_string(&log_path) {
+        Ok(c) => c,
+        Err(_) => return HashSet::new(),
+    };
+
+    let cutoff = if since_days > 0 {
+        let dt = chrono::Local::now() - chrono::Duration::days(since_days as i64);
+        Some(dt.format("%Y-%m-%dT%H:%M:%S").to_string())
+    } else {
+        None
+    };
+
+    let mut set = HashSet::new();
+    for line in content.lines() {
+        let parts: Vec<&str> = line.splitn(4, " | ").collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let timestamp = parts[0];
+        let action = parts[1];
+        let original_cmd = parts[2];
+
+        if action != "rewrite" {
+            continue;
+        }
+
+        if let Some(ref cutoff_str) = cutoff {
+            if timestamp < cutoff_str.as_str() {
+                continue;
+            }
+        }
+
+        if let Classification::Supported { rtk_equivalent, .. } = classify_command(original_cmd) {
+            set.insert(rtk_equivalent);
+        }
+    }
+    set
 }
 
 pub fn run(
@@ -76,9 +124,13 @@ pub fn run(
     let mut already_rtk: usize = 0;
     let mut parse_errors: usize = 0;
     let mut rtk_disabled_count: usize = 0;
+    let mut hook_handled_count: usize = 0;
     let mut rtk_disabled_cmds: HashMap<String, usize> = HashMap::new();
     let mut supported_map: HashMap<&'static str, SupportedBucket> = HashMap::new();
     let mut unsupported_map: HashMap<String, UnsupportedBucket> = HashMap::new();
+
+    let hook_handled_equivalents = load_hook_handled_equivalents(since_days);
+    let hook_active = !hook_handled_equivalents.is_empty();
 
     for session_path in &sessions {
         let extracted = match provider.extract_commands(session_path) {
@@ -133,6 +185,11 @@ pub fn run(
                         });
 
                         bucket.count += 1;
+
+                        // Track hook coverage at the bucket level
+                        if hook_handled_equivalents.contains(rtk_equivalent) {
+                            hook_handled_count += 1;
+                        }
 
                         // Estimate tokens for this command
                         let output_tokens = if let Some(len) = ext_cmd.output_len {
@@ -223,6 +280,7 @@ pub fn run(
                 estimated_savings_tokens: bucket.total_output_tokens,
                 estimated_savings_pct: effective_savings_pct,
                 rtk_status: status,
+                hook_handled: hook_handled_equivalents.contains(bucket.rtk_equivalent),
             }
         })
         .collect();
@@ -257,6 +315,8 @@ pub fn run(
         sessions_scanned: sessions.len(),
         total_commands,
         already_rtk,
+        hook_handled_count,
+        hook_active,
         since_days,
         supported,
         unsupported,
