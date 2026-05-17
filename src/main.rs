@@ -48,7 +48,7 @@ pub enum AgentTarget {
 #[derive(Parser)]
 #[command(
     name = "rtk",
-    version,
+    version = "0.40.0.1",
     about = "Rust Token Killer - Minimize LLM token consumption",
     long_about = "A high-performance CLI proxy designed to filter and summarize system outputs before they reach your LLM context."
 )]
