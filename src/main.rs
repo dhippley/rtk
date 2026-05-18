@@ -7,9 +7,11 @@ mod learn;
 mod parser;
 
 // Re-export command modules for routing
+use cmds::apple;
 use cmds::cloud::{aws_cmd, container, curl_cmd, psql_cmd, wget_cmd};
 use cmds::dotnet::{binlog, dotnet_cmd, dotnet_format_report, dotnet_trx};
-use cmds::git::{diff_cmd, gh_cmd, git, glab_cmd, gt_cmd};
+use cmds::elixir;
+use cmds::git::{diff_cmd, gh_cmd, git, git_ls_files, glab_cmd, gt_cmd};
 use cmds::go::{go_cmd, golangci_cmd};
 use cmds::js::{
     lint_cmd, next_cmd, npm_cmd, playwright_cmd, pnpm_cmd, prettier_cmd, prisma_cmd, tsc_cmd,
@@ -703,6 +705,34 @@ enum Commands {
         args: Vec<String>,
     },
 
+    /// Elixir mix with general output filtering
+    Mix {
+        /// Mix arguments (e.g., compile, deps.get, format, linter.all)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Elixir mix test with compact output (failures only)
+    MixTest {
+        /// Mix test arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Elixir mix run with filtered setup output
+    MixRun {
+        /// Mix run arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
+    /// Xcode build tool with compact output (errors/warnings only)
+    Xcodebuild {
+        /// xcodebuild arguments
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+
     /// Go commands with compact output
     Go {
         #[command(subcommand)]
@@ -866,6 +896,12 @@ enum GitCommands {
     /// Remote listing (deduplicated with -v)
     Remote {
         /// Git remote arguments (supports -v, --verbose, etc)
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+    /// Truncate large file listings
+    LsFiles {
+        /// Git ls-files arguments
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -1592,6 +1628,28 @@ fn run_cli() -> Result<i32> {
                     cli.verbose,
                     &global_args,
                 )?,
+                GitCommands::LsFiles { args } => {
+                    let timer = crate::core::tracking::TimedExecution::start();
+                    let mut cmd = crate::core::utils::resolved_command("git");
+                    for arg in &args {
+                        cmd.arg(arg);
+                    }
+                    let result = crate::core::stream::exec_capture(&mut cmd)
+                        .context("Failed to execute git ls-files")?;
+                    let filtered = git_ls_files::filter_git_ls_files(&result.stdout)
+                        .unwrap_or_else(|e| {
+                            eprintln!("rtk: filter warning: {}", e);
+                            result.stdout.clone()
+                        });
+                    timer.track(
+                        "git ls-files",
+                        "rtk git ls-files",
+                        &result.stdout,
+                        &filtered,
+                    );
+                    print!("{}", filtered);
+                    result.exit_code
+                }
                 GitCommands::Other(args) => git::run_passthrough(&args, &global_args, cli.verbose)?,
             }
         }
@@ -2134,6 +2192,24 @@ fn run_cli() -> Result<i32> {
         Commands::Rspec { args } => rspec_cmd::run(&args, cli.verbose)?,
 
         Commands::Pip { args } => pip_cmd::run(&args, cli.verbose)?,
+
+        Commands::Mix { args } => {
+            elixir::mix_cmd::run(elixir::mix_cmd::MixArgs { args: args.clone() })?
+        }
+
+        Commands::MixTest { args } => {
+            elixir::mix_test_cmd::run(elixir::mix_test_cmd::MixTestArgs { args: args.clone() })?
+        }
+
+        Commands::MixRun { args } => {
+            elixir::mix_run_cmd::run(elixir::mix_run_cmd::MixRunArgs { args: args.clone() })?
+        }
+
+        Commands::Xcodebuild { args } => {
+            apple::xcodebuild_cmd::run(apple::xcodebuild_cmd::XcodebuildArgs {
+                args: args.clone(),
+            })?
+        }
 
         Commands::Go { command } => match command {
             GoCommands::Test { args } => go_cmd::run_test(&args, cli.verbose)?,

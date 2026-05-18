@@ -1,0 +1,23 @@
+Resolving Hex dependencies...
+Fetching hex metadata from https://repo.hex.pm
+  Resolving dependencies (0%)
+  Resolving dependencies (23%)
+  Resolving dependencies (45%)
+  Resolving dependencies (67%)
+  Resolving dependencies (100%)
+Compiling sample (lib/sample.ex)
+Generated sample app
+Resolving Hex dependencies...
+Compiling ecto (13.0.0)
+Compiling decimal (2.0.1)
+Compiling phoenix (1.5.0)
+Compiling sample (lib/sample.ex)
+Generated sample app
+Generated sample.ex
+Generated sample.Repo
+Generated sample.Router
+== Running 20230101000000_create_users.exs
+== Running 20230102000000_create_posts.exs
+== Running 20230103000000_create_comments.exs
+Finished in 2.34 seconds
+0 failures

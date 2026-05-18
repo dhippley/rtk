@@ -1,0 +1,19 @@
+Resolving Hex dependencies...
+Fetching hex metadata from https://repo.hex.pm
+  Getting decimal (v2.0.1)
+  Getting uuid (v1.1.8)
+  Getting ecto (v3.11.0)
+  Getting phoenix (v1.7.0)
+  Getting cowboy (v2.9.0)
+  Getting plug (v1.14.0)
+  Getting jason (v1.4.0)
+  Getting logger_file_backend (v0.0.13)
+  Getting telemetry (v1.2.0)
+  Getting finch (v0.16.0)
+  Getting mime (v2.0.0)
+  [50 more dependencies]
+  Getting ex_json_schema (v0.8.0)
+  Getting httpoison (v2.0.0)
+Resolving Hex dependencies...
+Compiling sample...
+Finished in 3.21 seconds

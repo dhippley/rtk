@@ -1,0 +1,16 @@
+Finished in 0.42 seconds
+123 tests, 2 failed, 5 skipped
+
+Failed tests:
+
+1) test_user_creation_with_invalid_email
+   Expected result not reached
+   Assertion at test/sample_test.exs:45
+   ** (RuntimeError) invalid email format
+   (sample) lib/sample.ex:23: Sample.create_user/1
+
+2) test_database_connection
+   Expected result not reached
+   Assertion at test/db_test.exs:87
+   ** (Ecto.ConnectionError) connection refused
+   (ecto) lib/ecto/connection.ex:42: Ecto.Connection.connect/1

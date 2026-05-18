@@ -1,0 +1,16 @@
+Checking code formatting...
+Resolving Hex dependencies...
+Compiling sample (lib/sample.ex)
+Generated sample app
+Scanning source files...
+  lib/sample.ex
+  lib/sample/repo.ex
+  lib/sample/user.ex
+  lib/sample/post.ex
+  [12 more files]
+  test/sample_test.exs
+  test/support/helpers.exs
+Formatting...
+Generated formatter config
+All files are properly formatted.
+Finished in 0.87 seconds

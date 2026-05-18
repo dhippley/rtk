@@ -1,0 +1,26 @@
+Build settings from command line:
+    PLATFORM_NAME = iphoneos
+    ARCHS = arm64
+    CONFIGURATION = Release
+
+Xcode build completed.
+Compiling Swift files (1/45)
+CompileSwift /Users/dev/Project/src/AppDelegate.swift
+CompileSwift /Users/dev/Project/src/ViewController.swift
+CompileSwift /Users/dev/Project/src/Model.swift
+CompileSwift /Users/dev/Project/src/Network.swift
+CompileSwift /Users/dev/Project/src/Database.swift
+CompileC /Users/dev/Project/src/Bridge.m
+CompileAsset /Users/dev/Project/src/Assets.xcassets
+Ld /Users/dev/Project/build/AppDelegate.o
+ProcessInfoPlistFile /Users/dev/Project/build/Info.plist
+CodeSign /Users/dev/Project/build/Project.app
+ProcessProductPackaging /Users/dev/Project/build/Project.ipa
+GenerateDSYMFile /Users/dev/Project/build/Project.app.dSYM
+
+Build complete!
+** BUILD SUCCEEDED **
+
+Real time: 45.234s
+User time: 38.123s
+System time: 6.456s
